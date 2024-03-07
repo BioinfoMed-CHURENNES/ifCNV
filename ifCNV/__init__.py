@@ -99,10 +99,16 @@ def generateGraph(sample, output_dir, reads, region, CNVneg):
         marker=dict(color=col, size=10)
     )]
     layout = go.Layout(
-        yaxis=dict(title='Nomalized reads ratio'),
-        plot_bgcolor='rgb(240,240,240)'
+        yaxis=dict(title='Normalized reads ratio'),
+        plot_bgcolor='rgb(240,240,240)',
+        title = f"{sample} : {region}"
     )
     fig = go.Figure(data=data, layout=layout)
+
+    # generate static image
+    fig.write_image(f"{output_dir}/{sample}_{region}.png", width=1200, height=860)
+
+    # generate dynamic plot
     plotly.offline.plot(
         fig,
         filename=f"{output_dir}/{sample}_{region}.html",
@@ -237,7 +243,7 @@ def createReadsMatrix(pathToBam, bedFile, output=None, verbose=False, cov=False)
                 print(f"Load 'bedtools multicov' tsv file for sample {sampleName}...")
             try:
                 pathCov = pathToBam + "/" + i
-                # add header to the dataframe (externel bedtools multicov do not put one)
+                # add header to the dataframe (external bedtools multicov do not put one)
                 df = pd.read_csv(pathCov, sep='\t', names=["chrom","start","end","name","score"])
                 final[sampleName] = df[df.keys()[len(df.columns) - 1]]
                 if verbose:
@@ -433,10 +439,11 @@ def main(args):
         final.to_csv(f"{args.output}/{args.run}.tsv", sep="\t")
 
     # Generate the report
+    print(final)
     generateReport(final, output_dir=args.output, reads=normReads, ressources=lib_ressources, CNVneg=CNVneg)
 
     if args.verbose:
-        print("ifCNV analysis done succesfully !\n")
+        print("ifCNV analysis done successfully !\n")
 
     if args.autoOpen:
         try:
