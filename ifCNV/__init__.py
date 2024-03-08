@@ -229,6 +229,7 @@ def createReadsMatrix(pathToBam, bedFile, output=None, verbose=False, cov=False)
     if cov==True:
         # extension of pre-computed bedtools multicov tsv file
         ext="tsv"
+        
     cmd = ["ls", pathToBam]
     res = subprocess.check_output(cmd)
     final = pd.DataFrame()
