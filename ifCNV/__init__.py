@@ -179,6 +179,7 @@ def getTemplate():
                 <th>Region</th>
                 <th>Reads ratio</th>
                 <th>Score</th>
+                <th>Status</th>
               </tr>
             </tfoot>
           </table>
@@ -387,7 +388,7 @@ def amplifEvalGene(reads_norm, region, CNVneg, sample):
 
 
 def aberrantAmpliconsFinal(reads, reads_norm, CNVpos, CNVneg, scoreThreshold=10, conta=0.01, mode="fast", run="ifCNV", verbose=True):
-    f = pd.DataFrame(columns=["Run", "Sample name", "Region", "Reads ratio", "Score","Status"])
+    f = pd.DataFrame(columns=["Run", "Sample name", "Region", "Reads ratio", "Score", "Status"])
 
     if mode == "extensive":
         samples = [*CNVpos, *CNVneg]
