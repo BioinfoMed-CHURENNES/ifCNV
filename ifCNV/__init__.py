@@ -82,6 +82,15 @@ def generateGraph(sample, output_dir, reads, region, CNVneg, ratio, score, statu
     dfneg = np.mean(reads[CNVneg], axis=1)
     dfpos = reads[sample]
 
+    spl_info = re.match(r"^(.+)-(a[0-9]+)-pe$", sample)
+
+    lib="na"
+    subspl="no_id"
+
+    if spl_info:
+        subspl=spl_info.group(1)
+        lib=spl_info.group(2)
+
     df = np.log2(np.array(dfpos) / np.array(dfneg))
 
     genes = [i.split("_")[0] for i in reads.index]
@@ -107,21 +116,16 @@ def generateGraph(sample, output_dir, reads, region, CNVneg, ratio, score, statu
     fig = go.Figure(data=data, layout=layout, layout_yaxis_range=[-2,2])
 
     # generate static image
-    suboutput_dir= f"{output_dir}/regions"
+    suboutput_dir= f"{output_dir}/images"
     if not os.path.isdir(suboutput_dir):
         cmd = ["mkdir", suboutput_dir]
         subprocess.check_output(cmd)
 
-    suboutput_dir= f"{output_dir}/regions/{region}"
-    if not os.path.isdir(suboutput_dir):
-        cmd = ["mkdir", suboutput_dir]
-        subprocess.check_output(cmd)
-
-    status_value="na"
+    status_value="NAB"
     if(status == 'Ampli' or status == 'Deletion'):
-        status_value=status.upper()
+        status_value=status[:3].upper()
 
-    fig.write_image(f"{suboutput_dir}/{sample}_{region}_{status_value}.png", width=1200, height=860)
+    fig.write_image(f"{suboutput_dir}/{subspl}_{region}_{status_value}_{lib}.png", width=1200, height=860)
 
     # generate dynamic plot
     plotly.offline.plot(
