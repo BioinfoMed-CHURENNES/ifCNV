@@ -10,3 +10,4 @@ dependencies:
   - plotly>=5.4
   - pybedtools>=0.8.2
   - ifcnv
+  - python-kaleido

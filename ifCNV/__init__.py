@@ -56,11 +56,11 @@ def generateReport(final, output_dir, reads, ressources, CNVneg):
         run = fff['Run']
         sample = fff['Sample name']
         region = fff['Region']
-
-        generateGraph(sample, output_dir, reads, region, CNVneg)
-
         ratio = str(round(fff['Reads ratio'], 2))
         score = str(round(fff['Score'], 2))
+        status = fff['Status']
+
+        generateGraph(sample, output_dir, reads, region, CNVneg, ratio, score, status)
 
         html = html.replace('<!--ADD RUN-->', '<!--ADD RUN-->\n\t\t\t<!--ADD RUN-->')
 
@@ -70,16 +70,26 @@ def generateReport(final, output_dir, reads, ressources, CNVneg):
             f'<td>{sample}</td>'
             f'<td>{region}</td>'
             f'<td>{ratio}</td>'
-            f'<td>{score}</td></tr>'
+            f'<td>{score}</td>'
+            f'<td>{status}</td></tr>'
         )
         html = html.replace('<!--ADD RUN-->', torep, 1)
         with open(output_report, "w") as FH_out:
             FH_out.write(html)
 
 
-def generateGraph(sample, output_dir, reads, region, CNVneg):
+def generateGraph(sample, output_dir, reads, region, CNVneg, ratio, score, status):
     dfneg = np.mean(reads[CNVneg], axis=1)
     dfpos = reads[sample]
+
+    spl_info = re.match(r"^(.+)-(a[0-9]+)-pe$", sample)
+
+    lib="na"
+    subspl="no_id"
+
+    if spl_info:
+        subspl=spl_info.group(1)
+        lib=spl_info.group(2)
 
     df = np.log2(np.array(dfpos) / np.array(dfneg))
 
@@ -99,10 +109,25 @@ def generateGraph(sample, output_dir, reads, region, CNVneg):
         marker=dict(color=col, size=10)
     )]
     layout = go.Layout(
-        yaxis=dict(title='Nomalized reads ratio'),
-        plot_bgcolor='rgb(240,240,240)'
+        yaxis=dict(title='Normalized reads ratio'),
+        plot_bgcolor='rgb(240,240,240)',
+        title = f"{sample} : {region} - ratio {ratio} / score {score} - {status}"
     )
-    fig = go.Figure(data=data, layout=layout)
+    fig = go.Figure(data=data, layout=layout, layout_yaxis_range=[-2,2])
+
+    # generate static image
+    suboutput_dir= f"{output_dir}/images"
+    if not os.path.isdir(suboutput_dir):
+        cmd = ["mkdir", suboutput_dir]
+        subprocess.check_output(cmd)
+
+    status_value="NAB"
+    if(status == 'Ampli' or status == 'Deletion'):
+        status_value=status[:3].upper()
+
+    fig.write_image(f"{suboutput_dir}/{subspl}_{region}_{status_value}_{lib}.png", width=1200, height=860)
+
+    # generate dynamic plot
     plotly.offline.plot(
         fig,
         filename=f"{output_dir}/{sample}_{region}.html",
@@ -118,10 +143,10 @@ def getTemplate():
     <title>ifCNV</title>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="ressources/lib///w3.css" />
+    <link rel="stylesheet" href="ressources/lib/w3.css" />
     <link rel="stylesheet" href="ressources/fontawesome-free-5.3.1-web/css/all.css" />
-    <link rel="stylesheet" href="ressources/lib///datatables/datatables.min.css" />
-    <link rel="stylesheet" href="ressources/lib///interface.css" />
+    <link rel="stylesheet" href="ressources/lib/datatables/datatables.min.css" />
+    <link rel="stylesheet" href="ressources/lib/interface.css" />
   </head>
   <body>
     <!-- Top container -->
@@ -145,6 +170,7 @@ def getTemplate():
                 <th>Region</th>
                 <th>Reads ratio</th>
                 <th>Score</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -157,6 +183,7 @@ def getTemplate():
                 <th>Region</th>
                 <th>Reads ratio</th>
                 <th>Score</th>
+                <th>Status</th>
               </tr>
             </tfoot>
           </table>
@@ -223,6 +250,7 @@ def createReadsMatrix(pathToBam, bedFile, output=None, verbose=False, cov=False)
     if cov==True:
         # extension of pre-computed bedtools multicov tsv file
         ext="tsv"
+        
     cmd = ["ls", pathToBam]
     res = subprocess.check_output(cmd)
     final = pd.DataFrame()
@@ -237,7 +265,7 @@ def createReadsMatrix(pathToBam, bedFile, output=None, verbose=False, cov=False)
                 print(f"Load 'bedtools multicov' tsv file for sample {sampleName}...")
             try:
                 pathCov = pathToBam + "/" + i
-                # add header to the dataframe (externel bedtools multicov do not put one)
+                # add header to the dataframe (external bedtools multicov do not put one)
                 df = pd.read_csv(pathCov, sep='\t', names=["chrom","start","end","name","score"])
                 final[sampleName] = df[df.keys()[len(df.columns) - 1]]
                 if verbose:
@@ -364,7 +392,7 @@ def amplifEvalGene(reads_norm, region, CNVneg, sample):
 
 
 def aberrantAmpliconsFinal(reads, reads_norm, CNVpos, CNVneg, scoreThreshold=10, conta=0.01, mode="fast", run="ifCNV", verbose=True):
-    f = pd.DataFrame(columns=["Run", "Sample name", "Region", "Reads ratio", "Score"])
+    f = pd.DataFrame(columns=["Run", "Sample name", "Region", "Reads ratio", "Score", "Status"])
 
     if mode == "extensive":
         samples = [*CNVpos, *CNVneg]
@@ -372,6 +400,8 @@ def aberrantAmpliconsFinal(reads, reads_norm, CNVpos, CNVneg, scoreThreshold=10,
         samples = CNVpos
 
     q = 0
+    a = 0
+    na =0
     for name in samples:
         abAmp = aberrantAmpliconsPerSample(name, reads_norm, CNVneg, conta=conta)
         if abAmp.shape != (0, ):
@@ -386,10 +416,19 @@ def aberrantAmpliconsFinal(reads, reads_norm, CNVpos, CNVneg, scoreThreshold=10,
 
                 if score > scoreThreshold:
                     if amplif > 1.5 or amplif < 0.7:
-                        f.loc[q] = [run, name, gene, amplif, score]
+                        status = 'Ampli'
+                        if(amplif < 0.7):
+                            status = 'Deletion'
+                        f.loc[q] = [run, name, gene, amplif, score, status]
                         q = q + 1
+                        a = a + 1
+                    else:
+                        f.loc[q] = [run, name, gene, amplif, score, 'Non Aberrant']
+                        q = q + 1
+                        na = na + 1
+
     if verbose:
-        print(f"{str(f.shape[0])} aberrant regions found in {str(len(np.unique(f['Sample name'])))} samples.\n")
+        print(f"{str(a)} aberrant regions found in {str(len(np.unique(f['Sample name'])))} samples.\n")
 
     return f
 
@@ -433,10 +472,11 @@ def main(args):
         final.to_csv(f"{args.output}/{args.run}.tsv", sep="\t")
 
     # Generate the report
+    print(final)
     generateReport(final, output_dir=args.output, reads=normReads, ressources=lib_ressources, CNVneg=CNVneg)
 
     if args.verbose:
-        print("ifCNV analysis done succesfully !\n")
+        print("ifCNV analysis done successfully !\n")
 
     if args.autoOpen:
         try:
